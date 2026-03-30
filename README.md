@@ -4,6 +4,8 @@ Galeria de imagens em **arquivo único PHP** (compatível com **PHP 8.0**) que l
 
 - Paginação.
 - Thumbnails.
+- Visualização ampliada ao clicar na imagem (ajustada à tela).
+- Navegação na visualização ampliada com setas esquerda/direita do teclado.
 - Filtro por nome.
 - Ordenação por nome, data e tipo de arquivo.
 - Ações individuais: renomear e excluir.

@@ -582,6 +582,7 @@ function buildPageUrl(int $page, int $cols, int $perPage, string $q, string $sor
             height: 100%;
             object-fit: cover;
             display: block;
+            cursor: zoom-in;
         }
 
         .item-body {
@@ -629,6 +630,54 @@ function buildPageUrl(int $page, int $cols, int $perPage, string $q, string $sor
         .muted {
             color: var(--muted);
             font-size: 0.9rem;
+        }
+
+        .lightbox {
+            position: fixed;
+            inset: 0;
+            background: rgba(3, 8, 16, 0.92);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            padding: 16px;
+        }
+
+        .lightbox.open { display: flex; }
+
+        .lightbox img {
+            max-width: 96vw;
+            max-height: 92vh;
+            width: auto;
+            height: auto;
+            object-fit: contain;
+            border-radius: 10px;
+            box-shadow: 0 8px 40px rgba(0, 0, 0, 0.45);
+        }
+
+        .lightbox-btn {
+            position: fixed;
+            top: 50%;
+            transform: translateY(-50%);
+            border: 1px solid #42506a;
+            background: rgba(14, 22, 36, 0.88);
+            color: #fff;
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            font-size: 1.4rem;
+            line-height: 1;
+            display: grid;
+            place-items: center;
+        }
+
+        .lightbox-btn.prev { left: 12px; }
+        .lightbox-btn.next { right: 12px; }
+        .lightbox-btn.close {
+            top: 16px;
+            right: 12px;
+            transform: none;
+            font-size: 1.2rem;
         }
 
         @media (max-width: 900px) {
@@ -736,10 +785,10 @@ function buildPageUrl(int $page, int $cols, int $perPage, string $q, string $sor
             <p class="muted">Nenhuma imagem encontrada no diretório atual.</p>
         <?php else: ?>
             <div class="gallery">
-                <?php foreach ($pagedImages as $image): ?>
+                <?php foreach ($pagedImages as $idx => $image): ?>
                     <article class="item">
                         <div class="thumb-wrap">
-                            <img src="<?= e(rawurlencode($image['name'])) ?>" alt="<?= e($image['name']) ?>" loading="lazy">
+                            <img src="<?= e(rawurlencode($image['name'])) ?>" alt="<?= e($image['name']) ?>" loading="lazy" class="thumb-image" data-index="<?= (int) $idx ?>">
                         </div>
                         <div class="item-body">
                             <label>
@@ -787,6 +836,13 @@ function buildPageUrl(int $page, int $cols, int $perPage, string $q, string $sor
         <?php endif; ?>
     </div>
 
+    <div class="lightbox" id="lightbox" aria-hidden="true">
+        <button type="button" class="lightbox-btn close" id="lb-close" aria-label="Fechar">✕</button>
+        <button type="button" class="lightbox-btn prev" id="lb-prev" aria-label="Imagem anterior">‹</button>
+        <img id="lb-image" src="" alt="">
+        <button type="button" class="lightbox-btn next" id="lb-next" aria-label="Próxima imagem">›</button>
+    </div>
+
     <script>
         function toggleSelectAll(state) {
             const items = document.querySelectorAll('.select-item');
@@ -794,6 +850,66 @@ function buildPageUrl(int $page, int $cols, int $perPage, string $q, string $sor
                 item.checked = state;
             });
         }
+
+        (function () {
+            const thumbs = Array.from(document.querySelectorAll('.thumb-image'));
+            const lightbox = document.getElementById('lightbox');
+            const lbImage = document.getElementById('lb-image');
+            const lbPrev = document.getElementById('lb-prev');
+            const lbNext = document.getElementById('lb-next');
+            const lbClose = document.getElementById('lb-close');
+            let currentIndex = 0;
+
+            function openAt(index) {
+                if (!thumbs.length) return;
+                if (index < 0) index = thumbs.length - 1;
+                if (index >= thumbs.length) index = 0;
+                currentIndex = index;
+
+                lbImage.src = thumbs[currentIndex].getAttribute('src');
+                lbImage.alt = thumbs[currentIndex].getAttribute('alt') || '';
+                lightbox.classList.add('open');
+                lightbox.setAttribute('aria-hidden', 'false');
+            }
+
+            function closeLightbox() {
+                lightbox.classList.remove('open');
+                lightbox.setAttribute('aria-hidden', 'true');
+                lbImage.src = '';
+            }
+
+            thumbs.forEach((thumb, index) => {
+                thumb.addEventListener('click', function () {
+                    openAt(index);
+                });
+            });
+
+            lbPrev.addEventListener('click', function (event) {
+                event.stopPropagation();
+                openAt(currentIndex - 1);
+            });
+
+            lbNext.addEventListener('click', function (event) {
+                event.stopPropagation();
+                openAt(currentIndex + 1);
+            });
+
+            lbClose.addEventListener('click', function (event) {
+                event.stopPropagation();
+                closeLightbox();
+            });
+
+            lightbox.addEventListener('click', function (event) {
+                if (event.target === lightbox) closeLightbox();
+            });
+
+            document.addEventListener('keydown', function (event) {
+                if (!lightbox.classList.contains('open')) return;
+                if (event.key === 'Escape') closeLightbox();
+                if (event.key === 'ArrowLeft') openAt(currentIndex - 1);
+                if (event.key === 'ArrowRight') openAt(currentIndex + 1);
+            });
+        })();
     </script>
 </body>
 </html>
