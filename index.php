@@ -10,6 +10,8 @@ session_start();
  */
 
 const GALLERY_TITLE = 'oneFilePHPGallery';
+const AUTH_USER = 'henrique';
+const AUTH_PASS = 'chegue1';
 const DEFAULT_PER_PAGE = 24;
 const DEFAULT_IMAGES_PER_ROW = 4;
 const MIN_IMAGES_PER_ROW = 1;
@@ -44,6 +46,11 @@ function validateCsrfOrFail(string $token, array $query): void
     if (!hash_equals($_SESSION['csrf_token'] ?? '', $token)) {
         redirectWithMessage('Token CSRF inválido.', 'error', $query);
     }
+}
+
+function isAuthenticated(): bool
+{
+    return isset($_SESSION['auth_ok']) && $_SESSION['auth_ok'] === true;
 }
 
 function isSafeFilename(string $name): bool
@@ -131,7 +138,43 @@ if (!in_array($queryConfig['sort'], $allowedSorts, true)) {
     $queryConfig['sort'] = 'name_asc';
 }
 
+$msg = isset($_GET['msg']) ? (string) $_GET['msg'] : '';
+$msgType = isset($_GET['type']) ? (string) $_GET['type'] : '';
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $rawAction = (string) ($_POST['action'] ?? '');
+
+    if ($rawAction === 'login') {
+        $user = trim((string) ($_POST['login_user'] ?? ''));
+        $pass = (string) ($_POST['login_pass'] ?? '');
+
+        if ($user === AUTH_USER && $pass === AUTH_PASS) {
+            $_SESSION['auth_ok'] = true;
+            header('Location: ?' . http_build_query([
+                'page' => $queryConfig['page'],
+                'cols' => $queryConfig['cols'],
+                'per_page' => $queryConfig['per_page'],
+                'q' => $queryConfig['q'],
+                'sort' => $queryConfig['sort'],
+                'msg' => 'Login efetuado com sucesso.',
+                'type' => 'success',
+            ]));
+            exit;
+        }
+
+        redirectWithMessage('Usuário ou senha inválidos.', 'error', [
+            'page' => 1,
+            'cols' => $queryConfig['cols'],
+            'per_page' => $queryConfig['per_page'],
+            'q' => $queryConfig['q'],
+            'sort' => $queryConfig['sort'],
+        ]);
+    }
+
+    if (!isAuthenticated()) {
+        redirectWithMessage('Faça login para acessar a galeria.', 'error');
+    }
+
     $queryCarry = [
         'page' => $queryConfig['page'],
         'cols' => $queryConfig['cols'],
@@ -142,7 +185,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     validateCsrfOrFail((string) ($_POST['csrf_token'] ?? ''), $queryCarry);
 
-    $action = (string) ($_POST['action'] ?? '');
+    $action = $rawAction;
+
+    if ($action === 'logout') {
+        $_SESSION = [];
+        if (ini_get('session.use_cookies')) {
+            $params = session_get_cookie_params();
+            setcookie(session_name(), '', time() - 42000, $params['path'], $params['domain'], $params['secure'], $params['httponly']);
+        }
+        session_destroy();
+        redirectWithMessage('Logout realizado com sucesso.', 'success');
+    }
 
     if ($action === 'delete_one') {
         $filename = (string) ($_POST['filename'] ?? '');
@@ -322,6 +375,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     redirectWithMessage('Ação inválida.', 'error', $queryCarry);
 }
 
+if (!isAuthenticated()) {
+    ?><!doctype html>
+    <html lang="pt-BR">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title><?= e(GALLERY_TITLE) ?> - Login</title>
+        <style>
+            body { font-family: system-ui, sans-serif; background:#10131a; color:#ecf0f8; margin:0; min-height:100vh; display:grid; place-items:center; }
+            .card { width:min(420px, 92vw); background:#1a2230; border:1px solid #2b364a; border-radius:14px; padding:20px; }
+            h1 { margin-top:0; font-size:1.3rem; }
+            label { display:block; margin-bottom:10px; color:#9fb0cc; font-size:0.92rem; }
+            input { width:100%; padding:10px; border-radius:8px; border:1px solid #2b364a; background:#0f1723; color:#ecf0f8; margin-top:4px; }
+            button { margin-top:8px; width:100%; padding:10px; border:0; border-radius:8px; background:#4e9cff; color:#fff; cursor:pointer; }
+            .flash { margin-bottom:12px; padding:10px; border-radius:8px; background:rgba(255,92,111,0.2); border:1px solid rgba(255,92,111,0.6); }
+        </style>
+    </head>
+    <body>
+        <div class="card">
+            <h1>Acesso restrito</h1>
+            <?php if ($msg !== ''): ?>
+                <div class="flash"><?= e($msg) ?></div>
+            <?php endif; ?>
+            <form method="post">
+                <input type="hidden" name="action" value="login">
+                <label>Usuário
+                    <input type="text" name="login_user" required>
+                </label>
+                <label>Senha
+                    <input type="password" name="login_pass" required>
+                </label>
+                <button type="submit">Entrar</button>
+            </form>
+        </div>
+    </body>
+    </html>
+    <?php
+    exit;
+}
+
 $images = getGalleryImages($currentDir, $allowedExtensions, $selfBasename);
 
 if ($queryConfig['q'] !== '') {
@@ -368,9 +461,6 @@ function buildPageUrl(int $page, int $cols, int $perPage, string $q, string $sor
         'sort' => $sort,
     ]);
 }
-
-$msg = isset($_GET['msg']) ? (string) $_GET['msg'] : '';
-$msgType = isset($_GET['type']) ? (string) $_GET['type'] : '';
 
 ?><!doctype html>
 <html lang="pt-BR">
@@ -551,7 +641,14 @@ $msgType = isset($_GET['type']) ? (string) $_GET['type'] : '';
     </style>
 </head>
 <body>
-    <h1><?= e(GALLERY_TITLE) ?></h1>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+        <h1><?= e(GALLERY_TITLE) ?></h1>
+        <form method="post">
+            <input type="hidden" name="csrf_token" value="<?= e($csrfToken) ?>">
+            <input type="hidden" name="action" value="logout">
+            <button type="submit" class="secondary">Sair</button>
+        </form>
+    </div>
 
     <div class="topbar">
         <form method="get">
